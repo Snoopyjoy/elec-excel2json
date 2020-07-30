@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Excel转JSON</title>
+    <style>
+        #table{
+            width: 100%;
+            height: 400px;
+            border: 1px dashed #cccccc;
+            padding: 2px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+        #table #tip{
+            width: 100%;
+            height: 100%;
+            color: #cccccc;
+            font-size: 50px;
+            text-align: center;
+            vertical-align: middle;
+            user-select: none;
+        }
+        #table.highlight{
+            background-color:#e5ffff;
+            border-color:#e5ffff;
+        }
+        .hidden{
+            display: none;
+        }
+        #table .item{
+            width: 100%;
+            border: 1px solid #333333;
+            font-size: 14px;
+            color: #333333;
+            text-align: right;
+            overflow: hidden;
+            height: 20px;
+            line-height: 20px;
+            background: #e5ffff;
+            margin-bottom: 3px;
+        }
+        .opers{
+            width: 100%;
+            height: 50px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .opers button{
+            margin: 10px;
+        }
+        .outputPath{
+            margin-bottom: 20px;
+        }
+        .title{
+            font-size: 30px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">
+        小游戏项目EXCEL配置转JSON工具
+    </div>
+    <div class="outputPath">
+        <label for="file_input" style="color: red"><b>选择导出目录：</b></label>
+        <input type="file" id="file_input" webkitdirectory directory />
+    </div>
+    <div id="table">
+        <div id="tip">
+            将.xlsx表格拖动到这里添加<br><br>双击移除
+        </div>
+    </div>
+    <div class="opers">
+        <select id="exType">
+            <option selected disabled>-- 请选择导出类型 --</option>
+            <option value="server">服务端</option>
+            <option value="client">客户端</option>
+        </select><span style="color: red">*</span>
+        <button onclick="exportTables(true)">所有表打包为一个JSON文件</button>
+        <button onclick="exportTables(false)">每个表导出单独JSON文件</button>
+        
+        <button onclick="clearItems()">清空</button>
+    </div>
+    <script>
+        const { ipcRenderer } = require('electron');
+        const tables = [];
+        document.getElementById('table').addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            for (const f of e.dataTransfer.files) {
+                const fileItem = document.createElement("div");
+                const filePath = f.path;
+                if( tables.indexOf( filePath ) === -1 && checkFileType(filePath) ){
+                    fileItem.innerHTML = filePath;
+                    fileItem.classList.add('item');
+                    tables.push( filePath );
+                    document.getElementById('table').appendChild(fileItem);
+                    console.log( filePath );
+                }
+            }
+            if( tables.length > 0 ){
+                document.getElementById('tip').classList.add('hidden');
+            }
+            removeDragHighLight();
+        });
+
+        function checkFileType( filePath ){
+            const fileExt = filePath.substr(filePath.length - 5);
+            return fileExt === ".xlsx";
+        }
+
+        document.getElementById('table').addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            addDragHighLight();
+        });
+
+        document.getElementById('table').addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            removeDragHighLight();
+        });
+
+        function addDragHighLight(){
+            document.getElementById('table').classList.add('highlight');
+        }
+
+        function removeDragHighLight(){
+            document.getElementById('table').classList.remove('highlight');
+        }
+
+        document.getElementById('table').addEventListener('dblclick', function(e){
+            const target = e.target;
+            console.log(target);
+            if( target && target.className && target.className === 'item' ){
+                removeItem( target );
+            }
+        })
+
+        function exportTables( pack ){
+            const fileValue = document.getElementById('file_input').value;
+            if( !fileValue ){
+                alert( '请选择导出目录' );
+                return;
+            }
+            
+            const exType = document.getElementById('exType').value;
+            if( !exType ){
+                alert( '请选择导出类型' );
+                return;
+            }
+            const outputPath = document.getElementById('file_input').files[0].path;
+            if( tables.length === 0 ){
+                alert( '请添加表格' );
+                return;
+            }
+            ipcRenderer.send( 'exportTable', {
+                side:exType, pack, outputPath, tables
+            } );
+        }
+
+        ipcRenderer.on('expSucc', () => {
+            alert('导出成功');
+        });
+
+        ipcRenderer.on('expFail', (event, err) => {
+            alert('导出失败' + err);
+        });
+
+        function removeItem( itemNode ){
+            if( itemNode && itemNode.parentNode ){
+                itemNode.parentNode.removeChild( itemNode );
+                const tablePath = itemNode.innerHTML;
+                const tableIndex = tables.indexOf( tablePath );
+                if( tableIndex > -1){
+                    tables.splice(tableIndex, 1);
+                }
+                if( tables.length === 0 ){
+                    document.getElementById('tip').classList.remove('hidden');
+                }
+                itemNode = null;
+            }
+        }
+
+        function clearItems(){
+            const items = document.querySelectorAll('.item');
+            items.forEach( (itemNode)=>{
+                itemNode.parentNode.removeChild( itemNode );
+                itemNode = null;
+            } );
+            tables.length = 0;
+            document.getElementById('tip').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
